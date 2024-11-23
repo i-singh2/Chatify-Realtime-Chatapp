@@ -1,27 +1,48 @@
 package com.example.chatapp;
 
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.Bundle;
+import android.provider.MediaStore;
 import android.util.Log;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.TextView;
 import android.widget.Toast;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+
+import com.google.android.gms.location.FusedLocationProviderClient;
+import com.google.android.gms.location.LocationServices;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.database.DataSnapshot;
 import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.ValueEventListener;
+
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.google.firebase.storage.FirebaseStorage;
+import com.google.firebase.storage.StorageReference;
+
 public class ChatActivity extends AppCompatActivity {
 
+    private static final int LOCATION_PERMISSION_REQUEST_CODE = 1000;
+    private static final int REQUEST_VIDEO_CAPTURE = 1;
+    private static final int REQUEST_CAMERA_PERMISSION = 1;
+    private static final int REQUEST_CAMERA_AND_MIC_PERMISSION = 1;
+    private FusedLocationProviderClient fusedLocationClient;
+    private ImageButton sendLocationButton;
+    private ImageButton recordVideoButton;
     private static final String TAG = "ChatActivity";
     private TextView chatTitle;
     private DatabaseReference chatRoomRef;
@@ -35,6 +56,7 @@ public class ChatActivity extends AppCompatActivity {
     private MessageAdapter messageAdapter;
     private List<Message> messageList;
     private String otherUserId;
+    private Uri videoUri;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -47,6 +69,10 @@ public class ChatActivity extends AppCompatActivity {
         sendButton = findViewById(R.id.send_btn);
         messageEditText = findViewById(R.id.messageEditText);
         messagesRecyclerView = findViewById(R.id.messagesRecyclerView);
+        sendLocationButton = findViewById(R.id.sendLocationButton);
+        recordVideoButton = findViewById(R.id.recordVideoButton);
+
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
 
         // Initialize RecyclerView and MessageAdapter
         messageList = new ArrayList<>();
@@ -88,6 +114,7 @@ public class ChatActivity extends AppCompatActivity {
             finish();
         });
 
+        // Set up send button
         sendButton.setOnClickListener(v -> {
             String messageText = messageEditText.getText().toString().trim();
             if (!messageText.isEmpty()) {
@@ -99,6 +126,27 @@ public class ChatActivity extends AppCompatActivity {
                 }
             }
         });
+
+        // Set up send location button
+        sendLocationButton.setOnClickListener(v -> {
+            // Check for location permissions
+            if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                // Request location permissions
+                ActivityCompat.requestPermissions(this, new String[]{android.Manifest.permission.ACCESS_FINE_LOCATION}, 1);
+            } else {
+                // Get and send location
+                sendLocationMessage();
+            }
+        });
+
+        recordVideoButton.setOnClickListener(v -> {
+            checkCameraPermission();
+            Log.d("ChatActivity", "Camera button clicked");
+            Intent takeVideoIntent = new Intent(MediaStore.ACTION_VIDEO_CAPTURE);
+            startActivityForResult(takeVideoIntent, 1);
+        });
+
+
     }
 
     private void generateSharedChatRoomId() {
@@ -189,4 +237,140 @@ public class ChatActivity extends AppCompatActivity {
             }
         });
     }
+
+    private void sendLocationMessage() {
+        if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            // TODO: Consider calling
+            //    ActivityCompat#requestPermissions
+            // here to request the missing permissions, and then overriding
+            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+            //                                          int[] grantResults)
+            // to handle the case where the user grants the permission. See the documentation
+            // for ActivityCompat#requestPermissions for more details.
+            return;
+        }
+        fusedLocationClient.getLastLocation()
+                .addOnSuccessListener(this, location -> {
+                    if (location != null) {
+                        // Generate Google Maps link
+                        String locationMessage = "https://maps.google.com/?q=" + location.getLatitude() + "," + location.getLongitude();
+
+                        // Send the location as a message
+                        sendMessage(locationMessage);
+                    }
+                });
+    }
+
+    // Override to handle location permission results
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == 1 && grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            sendLocationMessage();
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+
+        if (requestCode == REQUEST_VIDEO_CAPTURE && resultCode == RESULT_OK && data != null) {
+            Uri videoUri = data.getData();
+            if (videoUri != null) {
+                Log.d("ChatActivity", "Video captured: " + videoUri.toString());
+                uploadVideoToFirebase(videoUri);
+            } else {
+                Log.e("ChatActivity", "Video URI is null");
+            }
+        }
+    }
+
+
+    private void uploadVideoToFirebase(Uri videoUri) {
+        if (chatRoomRef == null) {
+            Log.e("ChatActivity", "chatRoomRef is null, cannot upload video.");
+            return;
+        }
+
+        String messageId = chatRoomRef.child("messages").push().getKey();
+        if (messageId == null) {
+            Log.e("ChatActivity", "Failed to generate message ID for video.");
+            return;
+        }
+
+        // Store video directly in the "videos" folder
+        StorageReference videoRef = FirebaseStorage.getInstance()
+                .getReference("videos/" + messageId + ".mp4");
+
+        videoRef.putFile(videoUri)
+                .addOnSuccessListener(taskSnapshot -> {
+                    videoRef.getDownloadUrl().addOnSuccessListener(uri -> {
+                        String videoUrl = uri.toString();
+                        Log.d("ChatActivity", "Video uploaded successfully: " + videoUrl);
+                        saveVideoMessageToDatabase(videoUrl, messageId);
+                    }).addOnFailureListener(e -> {
+                        Log.e("ChatActivity", "Failed to get video download URL", e);
+                    });
+                })
+                .addOnFailureListener(e -> {
+                    Log.e("ChatActivity", "Failed to upload video", e);
+                });
+    }
+
+    private void saveVideoMessageToDatabase(String videoUrl, String messageId) {
+        // Create a new message object with video URL
+        Message videoMessage = new Message(currentUserId, otherUserId, "", System.currentTimeMillis());
+        videoMessage.setVideoUrl(videoUrl); // Set the video URL in the message object
+
+        // Save the message in the chat room
+        chatRoomRef.child("messages").child(messageId).setValue(videoMessage)
+                .addOnCompleteListener(task -> {
+                    if (task.isSuccessful()) {
+                        Log.d("ChatActivity", "Video message saved successfully");
+                    } else {
+                        Log.e("ChatActivity", "Failed to save video message: ", task.getException());
+                    }
+                });
+    }
+
+
+
+    private void sendVideoMessage(String videoUrl) {
+        // Generate a unique message ID
+        String messageId = chatRoomRef.child("messages").push().getKey();
+        if (messageId == null) {
+            Log.e("ChatActivity", "Failed to generate message ID. Cannot send video message.");
+            return;
+        }
+
+        // Create a video message object
+        Message videoMessage = new Message(currentUserId, otherUserId, "", System.currentTimeMillis());
+        videoMessage.setVideoUrl(videoUrl); // Set the video URL
+
+        // Save the video message under the "messages" node
+        chatRoomRef.child("messages").child(messageId).setValue(videoMessage)
+                .addOnCompleteListener(task -> {
+                    if (task.isSuccessful()) {
+                        Log.d("ChatActivity", "Video message sent successfully: " + videoUrl);
+                    } else {
+                        Log.e("ChatActivity", "Failed to send video message: ", task.getException());
+                    }
+                })
+                .addOnFailureListener(e -> Log.e("ChatActivity", "Error while sending video message: ", e));
+    }
+
+    private void checkCameraPermission() {
+        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED ||
+                ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, new String[]{android.Manifest.permission.CAMERA, android.Manifest.permission.RECORD_AUDIO}, REQUEST_CAMERA_PERMISSION);
+        }
+
+
+    }
 }
+
+
+
+
+
+

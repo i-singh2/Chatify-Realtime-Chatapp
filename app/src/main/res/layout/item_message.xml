@@ -15,6 +15,15 @@
         android:layout_alignParentStart="true"
         android:layout_marginEnd="50dp" />
 
+    <ImageView
+        android:id="@+id/receiverVideoThumbnail"
+        android:layout_width="200dp"
+        android:layout_height="150dp"
+        android:scaleType="centerCrop"
+        android:layout_alignParentStart="true"
+        android:visibility="gone"
+        android:layout_margin="8dp" />
+
     <!-- Sender's message (right aligned) -->
     <TextView
         android:id="@+id/senderMessageText"
@@ -26,4 +35,14 @@
         android:visibility="gone"
         android:layout_alignParentEnd="true"
         android:layout_marginStart="50dp" />
+
+    <ImageView
+        android:id="@+id/senderVideoThumbnail"
+        android:layout_width="200dp"
+        android:layout_height="150dp"
+        android:scaleType="centerCrop"
+        android:layout_alignParentEnd="true"
+        android:visibility="gone"
+        android:layout_margin="8dp" />
+
 </RelativeLayout>

@@ -44,30 +44,48 @@
 
     <RelativeLayout
         android:layout_width="match_parent"
-        android:layout_height="80dp"
+        android:layout_height="wrap_content"
         android:layout_alignParentBottom="true"
-        android:padding="8dp"
         android:id="@+id/bottom_layout">
 
         <EditText
             android:id="@+id/messageEditText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Write Message"
-            android:layout_centerInParent="true"
-            android:layout_margin="10dp"
+            android:hint="@string/write_message"
             android:padding="10dp"
-            android:layout_toLeftOf="@+id/send_btn"/>
+            android:layout_toStartOf="@id/recordVideoButton" />
+
         <ImageButton
+            android:id="@+id/recordVideoButton"
             android:layout_width="45dp"
             android:layout_height="45dp"
-            android:src="@drawable/send"
-            android:layout_alignParentEnd="true"
-            android:layout_centerInParent="true"
+            android:src="@drawable/video"
+            android:layout_centerVertical="true"
             android:backgroundTint="@color/primary"
-            android:id="@+id/send_btn"/>
+            android:layout_toStartOf="@+id/sendLocationButton" />
+
+
+        <ImageButton
+            android:id="@+id/sendLocationButton"
+            android:layout_width="45dp"
+            android:layout_height="45dp"
+            android:src="@drawable/location"
+            android:backgroundTint="@color/primary"
+            android:layout_toStartOf="@id/send_btn"
+            android:layout_centerVertical="true" />
+
+        <ImageButton
+            android:id="@+id/send_btn"
+            android:layout_width="45dp"
+            android:layout_height="45dp"
+            android:layout_alignParentEnd="true"
+            android:layout_centerVertical="true"
+            android:backgroundTint="@color/primary"
+            android:src="@drawable/send" />
+
     </RelativeLayout>
 
-        
-   
+
+
 </RelativeLayout>

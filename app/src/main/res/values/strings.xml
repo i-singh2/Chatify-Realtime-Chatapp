@@ -1,4 +1,6 @@
 <resources>
     <string name="app_name">ChatApp</string>
     <string name="sign_up">Sign Up</string>
+    <string name="todo">TODO</string>
+    <string name="write_message">Write Message</string>
 </resources>
